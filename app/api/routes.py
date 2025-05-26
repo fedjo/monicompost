@@ -4,7 +4,8 @@ from sqlalchemy.orm import Session
 
 from app.db import crud, schemas
 from app.db.database import SessionLocal
-from app.scheduler.scheduler import schedule_pile_monitor_job
+import app.services.thingsboard as tb
+from app.scheduler.scheduler import remove_running_job, schedule_pile_monitor_job
 
 
 router = APIRouter()
@@ -31,6 +32,21 @@ def create_pile(pile: schemas.CompostPileCreate, db: Session = Depends(get_db)):
     return crud.create_pile(db, pile)
 
 @router.get("/monitor/{asset_id}")
-def monitor_pile(asset_id: str, db: Session = Depends(get_db)):
-    schedule_pile_monitor_job(asset_id=asset_id)
-    return JSONResponse(content={'status': 'Job created'})
+def add_monitor_job(asset_id: str, db: Session = Depends(get_db)):
+    try:
+        token = tb.login_tb()
+        if not tb.get_asset_info(asset_id, token):
+            return JSONResponse(content={'status': f'Asset: f{asset_id} not found'}, status_code=404)
+
+        job_id = schedule_pile_monitor_job(asset_id=asset_id)
+        return JSONResponse(content={'status': f'Job with id: {job_id} was created'})
+    except Exception as e:
+        return JSONResponse(content={'status': f'Error: {str(e)}'}, status_code=500)
+
+@router.get("/cancel/{asset_id}")
+def cancel_monitor_job(asset_id: str, db: Session = Depends(get_db)):
+    try:
+        job_id = remove_running_job(asset_id)
+    except Exception as e:
+        return JSONResponse(content={'status': f'Error: {str(e)}'}, status_code=500)
+    return JSONResponse(content={'status': f'Job with id: {job_id} was cancelled'})

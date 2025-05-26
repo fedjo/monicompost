@@ -55,6 +55,29 @@ def get_telemetry(device_id, keys, token):
     return r.json()
 
 
+def get_asset_info(asset_id, token):
+    url = f"{settings.THINGSBOARD_URL}/api/asset/{asset_id}"
+    headers = {
+        "Content-Type": "application/json",
+        "X-Authorization": f"Bearer {token}"
+    }
+
+    try:
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 404:
+            logging.error(f"Asset with ID '{asset_id}' not found.")
+            return None
+        else:
+            logging.error(f"Failed to retrieve asset. Status code: {response.status_code}")
+            return None
+    except requests.exceptions.RequestException as e:
+        logging.error(f"An error occurred: {e}")
+        return None
+
+
+
 def get_devices_by_asset(asset_id, token):
     url = f"{settings.THINGSBOARD_URL}/api/relations/info?fromId={asset_id}&fromType=ASSET"
     headers = {"X-Authorization": f"Bearer {token}"}
@@ -85,7 +108,7 @@ def get_asset_attributes(asset_id, token):
         return {}
 
 
-def get_asset_info(device_id, token):
+def get_asset_info_from_device(device_id, token):
     headers = {"X-Authorization": f"Bearer {token}"}
     url = f"{settings.THINGSBOARD_URL}/api/relations?toId={device_id}&toType=DEVICE"
     
