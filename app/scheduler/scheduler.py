@@ -17,7 +17,7 @@ def schedule_pile_monitor_job(asset_id):
         minute=0,
         id=job_id,
         args=[asset_id],
-        start_date=datetime.datetime.now(),
+        next_run_time=datetime.datetime.now(),
         replace_existing=True
     )
     running_job_ids.add(job_id)

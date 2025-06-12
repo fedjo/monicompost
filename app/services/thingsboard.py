@@ -6,6 +6,8 @@ import logging
 
 from app.config import settings
 
+import pandas as pd
+
 
 TB_URL = os.getenv("THINGSBOARD_URL")
 TB_USER = os.getenv("THINGSBOARD_USERNAME")
@@ -39,7 +41,7 @@ def get_time_range():
     return int(start.timestamp() * 1000), int(end.timestamp() * 1000)
 
 
-def get_telemetry(device_id, keys, token):
+def get_telemetry_for_current_day(device_id, keys, token):
     headers = {"X-Authorization": f"Bearer {token}"}
     start_ts, end_ts = get_time_range()
     params = {
@@ -53,6 +55,37 @@ def get_telemetry(device_id, keys, token):
     r = requests.get(url, headers=headers, params=params)
     r.raise_for_status()
     return r.json()
+
+def get_all_telemetry_for_key_df(device_id, key, start_date, token):
+    headers = {"X-Authorization": f"Bearer {token}"}
+    start_ts = int(pd.to_datetime(start_date).timestamp() * 1000)
+    end_ts = int(datetime.datetime.now(datetime.timezone.utc).timestamp() * 1000)
+    params = {
+        "keys": key,
+        "startTs": start_ts,
+        "endTs": end_ts,
+        "limit": 10000,
+        "orderBy": "DESC"
+    }
+    url = f"{settings.THINGSBOARD_URL}/api/plugins/telemetry/DEVICE/{device_id}/values/timeseries"
+    r = requests.get(url, headers=headers, params=params)
+    r.raise_for_status()
+    data = r.json()
+
+    # Convert to DataFrame
+    if key not in data:
+        raise ValueError(f"No data found for key '{key}'")
+
+    records = data[key]
+    df = pd.DataFrame([{
+        "timestamp": int(r["ts"]),
+        key: float(r["value"])
+    } for r in records])
+
+    df["datetime"] = pd.to_datetime(df["timestamp"], unit='ms')
+    df.set_index("datetime", inplace=True)
+    df = df.iloc[::-1]
+    return df
 
 
 def get_asset_info(asset_id, token):

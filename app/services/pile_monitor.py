@@ -2,8 +2,11 @@ import datetime
 import logging
 from typing import Any, Dict, List
 
+import pandas as pd
+
 
 def analyze_compost_status(
+    temp_df: pd.DataFrame,
     daily_stats: Dict[str, Dict[str, float]],  # Aggregated stats (min, max, avg, std for temp, moisture, etc.)
     start_date: datetime.datetime,                      # Compost start date
     compost_materials: List[str],              # List of compost materials (e.g., ['greens', 'brown'])
@@ -25,15 +28,7 @@ def analyze_compost_status(
     avg_temp = daily_stats['data_TEMP_SOIL']['avg']
     avg_moisture = daily_stats['data_water_SOIL']['avg']
     avg_ph = daily_stats['data_PH1_SOIL']['avg']
-    phase = determine_phase(avg_temp, avg_ph)
-
-
-    if avg_temp > 60 and avg_moisture > 50:
-        phase = "Active"
-    elif avg_temp > 40 and avg_moisture < 50:
-        phase = "Maturing"
-    else:
-        phase = "Curing"
+    phase = infer_compost_phase_from_series(temp_df["temp_ma"], compost_age_days)
 
     # Calculate Total Duration (Speed Factor adjusted)
     compost_hot_duration = 90
@@ -58,6 +53,82 @@ def analyze_compost_status(
     }
 
     return compost_status
+
+# -------------------- Phase Transistion Logic --------------------
+def detect_phases_transition(temp_df):
+    temp_series = temp_df['temp_ma']
+    thermophilic_started = False
+    thermophilic_start_time = None
+    thermophilic_end_time = None
+    thermophilic_days = 0
+    consecutive_above = 0
+    consecutive_below = 0
+
+    mesophilic_entered = False
+    thermophilic_entered = False
+    cooling_entered = False
+    maturation_entered = False
+
+    phase_changes = []
+
+    for ts, temp in temp_series.items():
+        if not mesophilic_entered and temp >= 20:
+            mesophilic_entered = True
+            phase_changes.append((ts, 'Mesophilic phase entered'))
+
+        if not thermophilic_started:
+            if temp >= 40:
+                consecutive_above += 1
+                if consecutive_above >= 12:
+                    thermophilic_started = True
+                    thermophilic_start_time = ts
+                    thermophilic_entered = True
+                    phase_changes.append((ts, 'Thermophilic phase started'))
+            else:
+                consecutive_above = 0
+        else:
+            if temp < 40:
+                consecutive_below += 1
+                if consecutive_below >= 1:
+                    thermophilic_end_time = ts
+                    duration = (thermophilic_end_time - thermophilic_start_time).days
+                    thermophilic_days += duration
+                    phase_changes.append((ts, f'Thermophilic phase ended after {duration} days'))
+                    thermophilic_started = False
+                    cooling_entered = True
+                else:
+                    consecutive_below = 0
+
+        if cooling_entered and temp < 35:
+            maturation_entered = True
+
+    current_phase = "Unknown"
+    latest_temp = temp_series.iloc[-1]
+
+    if latest_temp < 20:
+        current_phase = 'Maturation'
+    elif latest_temp < 40:
+        if thermophilic_entered:
+            current_phase = 'Cooling'
+        else:
+            current_phase = 'Mesophilic'
+    else:
+        current_phase = 'Thermophilic'
+
+    # Anomaly detection
+    anomaly = None
+    total_days = (temp_series.index[-1] - temp_series.index[0]).days
+    if not thermophilic_entered:
+        anomaly = 'no_thermophilic'
+    elif thermophilic_days < 3:
+        anomaly = 'short_thermophilic'
+    elif mesophilic_entered and thermophilic_start_time:
+        mesophilic_days = (thermophilic_start_time - temp_series.index[0]).days
+
+        if mesophilic_days > 5:
+            anomaly = 'delayed_warmup'
+
+    return phase_changes, current_phase, mesophilic_entered, thermophilic_entered, cooling_entered, maturation_entered, anomaly
 
 
 # Helper functions from the advanced logic
@@ -98,18 +169,38 @@ def classify_materials(material_list):
     return speed_factor
 
 
-# Determine the phase of compost based on temperature and PH
-def determine_phase(temp, ph):
-    if temp <= 40 and ph <= 6.5:
-        return "Mesophilic"
-    elif temp > 40 and temp <= 70:
-        return "Thermophilic"
-    elif temp <= 45 and temp > 35:
-        return "Cooling"
-    elif temp <= 35 and ph <= 7.5:
-        return "Maturation"
+# -------------------- Compost Phase Detection --------------------
+def infer_compost_phase_from_series(temp_df, days_since_start) -> str:
+    if len(temp_df) < 2:
+        return "Insufficient data"
+
+    trend = temp_df.diff().dropna()
+    avg_trend = trend[-70:].mean() # 1-day trend
+    latest_temp = temp_df.iloc[-1]
+
+    if latest_temp < 20:
+        return "Maturation Phase" if days_since_start > 30 else "Inactive"
+    elif 20 <= latest_temp <= 40:
+        if avg_trend > 2:
+            return "Mesophilic Phase (heating up)"
+        elif avg_trend < -2:
+            return "Cooling Phase (declining)"
+        else:
+            if days_since_start < 8:
+                return "Stable Mesophilic"
+            elif days_since_start > 30:
+                return "Late Cooling"
+            else:
+                return "Phase is unstable! Please check the compost"
+    elif 40 < latest_temp <= 70:
+        if avg_trend > 0:
+            return "Thermophilic Phase (active)"
+        elif avg_trend < -1:
+            return "Thermophilic Cooling Phase (declining)"
+        else:
+            return "Stable Thermophilic Phase"
     else:
-        return "Unknown"
+        return "Possible sensor error or overheating"
 
 
 # Generate compose recommendation based on  Temp, PH, Moisture
