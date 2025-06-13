@@ -8,6 +8,9 @@ from app.config import settings
 from app.services.pile_monitor import analyze_compost_status
 from app.services.thingsboard import login_tb, get_devices_by_asset, get_telemetry_for_current_day, \
     get_asset_attributes, post_recommendation_to_tb, get_all_telemetry_for_key_df
+from app.services import weather_service as ws
+from app.services import farm_calendar as fc
+
 
 def create_recommendation_for_pile(asset_id):
     logging.info(f"🔁 Running recommendation analysis for Compost Pile: {asset_id}")
@@ -20,6 +23,8 @@ def create_recommendation_for_pile(asset_id):
         asset_attrs = get_asset_attributes(asset_id, token)
         start_date = datetime.datetime.fromtimestamp(asset_attrs.get("start_date", 0) / 1000)
         materials_str = asset_attrs.get("materials", [])
+        latitude = asset_attrs.get('Latitude')
+        longitude = asset_attrs.get('Longitude')
 
         daily_stats = {}
         temp_df = pd.DataFrame()
@@ -54,10 +59,18 @@ def create_recommendation_for_pile(asset_id):
                     window = 6 # Appox 2 hours
                     temp_df["temp_ma"] = temp_df[key].rolling(window=window, min_periods=1).mean()
 
+        # Get weather forecast
+        url = f"{settings.WEATHER_SERVICE_URL}/api/linkeddata/forecast5"
+        forecast = ws.get_24h_forecast(url, latitude, longitude, fc.login_to_fc())
+
 
         # Parse attributes
         materials = [m.strip() for m in materials_str.split(",")]
-        results = analyze_compost_status(temp_df, daily_stats, start_date, materials, [15.2], [10], [4.3])
+        results = analyze_compost_status(
+            temp_df, daily_stats,
+            start_date, materials,
+            forecast["temperature"], forecast["humidity"], []
+        )
 
         post_success = post_recommendation_to_tb(asset_id, results, token)
 
