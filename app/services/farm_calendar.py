@@ -16,6 +16,7 @@ def login_to_fc():
             logging.error("Login failed: No token returned.")
             return None
         logging.info("Logged in successfully to Farm Calendar")
+
         return token
     except requests.exceptions.RequestException as e:
         logging.error(f"Error logging in to Farm Calendar: {e}")

@@ -22,7 +22,8 @@ def create_recommendation_for_pile(asset_id):
         # Get server-side attributes
         asset_attrs = get_asset_attributes(asset_id, token)
         start_date = datetime.datetime.fromtimestamp(asset_attrs.get("start_date", 0) / 1000)
-        materials_str = asset_attrs.get("materials", [])
+        greens_kg = asset_attrs.get("Greens_(KG)", 0)
+        browns_kg = asset_attrs.get("Browns_(KG)", 0)
         latitude = asset_attrs.get('Latitude')
         longitude = asset_attrs.get('Longitude')
 
@@ -61,14 +62,17 @@ def create_recommendation_for_pile(asset_id):
 
         # Get weather forecast
         url = f"{settings.WEATHER_SERVICE_URL}/api/linkeddata/forecast5"
-        forecast = ws.get_24h_forecast(url, latitude, longitude, fc.login_to_fc())
+        # forecast = ws.get_24h_forecast(url, latitude, longitude, fc.login_to_fc())
+        forecast = {
+            "temperature": [0.0],
+            "humidity": [0.0]
+        }
 
 
         # Parse attributes
-        materials = [m.strip() for m in materials_str.split(",")]
         results = analyze_compost_status(
             temp_df, daily_stats,
-            start_date, materials,
+            start_date, greens_kg, browns_kg,
             forecast["temperature"], forecast["humidity"], []
         )
 

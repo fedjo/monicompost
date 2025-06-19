@@ -6,10 +6,11 @@ import pandas as pd
 
 
 def analyze_compost_status(
-    temp_df: pd.DataFrame,
+    temperature_history_df: pd.DataFrame,
     daily_stats: Dict[str, Dict[str, float]],  # Aggregated stats (min, max, avg, std for temp, moisture, etc.)
-    start_date: datetime.datetime,                      # Compost start date
-    compost_materials: List[str],              # List of compost materials (e.g., ['greens', 'brown'])
+    start_date: datetime.datetime,              # Compost start date
+    greens: int,                                # Total amount of greens added in the compost
+    browns: int,                                # Total amount of browns added in the compost
     forecast_temp: List[float],                # List of forecasted temperatures for the next day (24 hourly values)
     forecast_humidity: List[float],           # List of forecasted humidity for the next day (24 hourly values)
     forecast_precipitation: List[float]       # List of forecasted precipitation for the next day (optional)
@@ -19,23 +20,14 @@ def analyze_compost_status(
     forecasted values for the next day, and material type.
     """
     logging.debug("Analyzing compost status...")
-    # Compost Age in days
-    compost_age_days = (datetime.datetime.utcnow() - start_date).days
+    # Calculate Total Duration
+    compost_age_days, remaining_days = estimate_total_duration_static(greens, browns, start_date)
 
-    # Compost speed factor
-    speed_factor = classify_materials(compost_materials)
     # Compost Phase based on average temperature and moisture
     avg_temp = daily_stats['data_TEMP_SOIL']['avg']
     avg_moisture = daily_stats['data_water_SOIL']['avg']
     avg_ph = daily_stats['data_PH1_SOIL']['avg']
-    phase = infer_compost_phase_from_series(temp_df["temp_ma"], compost_age_days)
-
-    # Calculate Total Duration (Speed Factor adjusted)
-    compost_hot_duration = 90
-    total_duration = compost_hot_duration * speed_factor
-
-    # Estimate Remaining Days for Composting
-    estimated_days_remaining = max(0, total_duration - compost_age_days)
+    phase = infer_compost_phase_from_series(temperature_history_df["temp_ma"], compost_age_days)
 
     # Recommendations based on forecasted values for the next day
     recommendation = generate_recommendations(avg_temp, avg_moisture, avg_ph)
@@ -44,17 +36,92 @@ def analyze_compost_status(
     # 7. Compile the results into a dictionary
     compost_status = {
         "compost_age_days": compost_age_days,
-        "speed_factor": speed_factor,
         "phase": phase,
-        "total_duration": total_duration,
-        "estimated_days_remaining": estimated_days_remaining,
+        "estimated_duration": (compost_age_days + remaining_days),
+        "estimated_days_remaining": remaining_days,
         "recommendation": recommendation,
         "weather_recommendation": weather_recommendation
     }
 
     return compost_status
 
-# -------------------- Phase Transistion Logic --------------------
+
+def calculate_cn_ratio(greens_kg, browns_kg, cn_greens=15, cn_browns=60):
+    total_carbon = (greens_kg * cn_greens) + (browns_kg * cn_browns)
+    total_nitrogen = greens_kg + browns_kg
+    if total_nitrogen == 0:
+        return 0
+    return total_carbon / total_nitrogen
+
+
+def base_speed_factor(cn_ratio):
+    if 25 <= cn_ratio <= 30:
+        return 1.0
+    elif 20 <= cn_ratio < 25 or 30 < cn_ratio <= 35:
+        return 0.8
+    elif 15 <= cn_ratio < 20 or 35 < cn_ratio <= 40:
+        return 0.6
+    else:
+        return 0.4
+
+
+def temp_factor(temp_c):
+    if 55 <= temp_c <= 65:
+        return 1.0
+    elif 50 <= temp_c < 55 or 65 < temp_c <= 70:
+        return 0.85
+    elif 40 <= temp_c < 50:
+        return 0.6
+    else:
+        return 0.4
+
+
+def humidity_factor(humidity_percent):
+    if 50 <= humidity_percent <= 60:
+        return 1.0
+    elif 45 <= humidity_percent < 50 or 60 < humidity_percent <= 65:
+        return 0.85
+    elif 40 <= humidity_percent < 45 or 65 < humidity_percent <= 70:
+        return 0.6
+    else:
+        return 0.4
+
+# Estimate compost duration days
+def estimate_total_duration_static(greens_kg, browns_kg, compost_start_date, base_days=90):
+    """
+    Estimate total compost duration using only material mix and start date.
+
+    Parameters:
+    - greens_kg: float, total weight of greens
+    - browns_kg: float, total weight of browns
+    - compost_start_date: datetime, start date of composting
+    - base_days: int, default full compost cycle under conditions
+        base_days = 90
+        Use when:
+
+        Static compost pile, turned occasionally (e.g., once every few weeks)
+        Partial control over moisture and temperature
+        Pile does not consistently reach thermophilic phase
+        Cooler ambient conditions or larger pile
+        This is common for:
+
+         * Farm-scale piles with basic monitoring
+         * Home composting without turning
+         * Systems without insulation or aeration
+
+    Returns:
+    - total_estimated_days: int, total expected duration of composting
+    - remaining_days: int, estimated days left
+    """
+    cn_ratio = calculate_cn_ratio(greens_kg, browns_kg)
+    speed_factor = base_speed_factor(cn_ratio)
+    total_estimated_days = int(round(base_days / speed_factor))
+
+    days_elapsed = (datetime.datetime.now() - compost_start_date).days
+    remaining_days = max(total_estimated_days - days_elapsed, 0)
+    return days_elapsed, remaining_days
+
+# Phase Transistion Logic
 def detect_phases_transition(temp_df):
     temp_series = temp_df['temp_ma']
     thermophilic_started = False
@@ -131,45 +198,7 @@ def detect_phases_transition(temp_df):
     return phase_changes, current_phase, mesophilic_entered, thermophilic_entered, cooling_entered, maturation_entered, anomaly
 
 
-# Helper functions from the advanced logic
-def classify_materials(material_list):
-    # Define the lists of green and woody materials
-    greens = ["vegetable scraps", "grass clippings", "coffee grounds", "manure"]
-    woody = ["branches", "twigs", "wood chips", "sawdust", "straw"]
-
-    # Define the speed factors for greens and browns
-    speed_factors = {
-        'greens': 1.5,  # Faster decomposition
-        'browns': 1.0,   # Slower decomposition
-        'mixed': 1.2     # Mixed materials decompose at an intermediate rate
-    }
-
-    # Initialize speed factor sum
-    speed_factor = 0
-
-    # Calculate speed factor based on materials in the list
-    for material in material_list:
-        if material in greens:
-            speed_factor += speed_factors['greens']  # Green materials have a faster decomposition rate
-        elif material in woody:
-            speed_factor += speed_factors['browns']  # Woody materials have a slower decomposition rate
-        else:
-            # If the material is not in the predefined categories, assign a default speed factor (e.g., 1.0)
-            speed_factor += 1.0
-
-    # If the list is empty or no recognized materials, avoid division by zero
-    if len(material_list) > 0:
-        # Average the speed factor across the number of materials in the list
-        speed_factor /= len(material_list)
-    else:
-        # Default speed factor if no materials are passed
-        speed_factor = 1.0
-
-    # Return the calculated speed factor
-    return speed_factor
-
-
-# -------------------- Compost Phase Detection --------------------
+# Compost Phase Detection
 def infer_compost_phase_from_series(temp_df, days_since_start) -> str:
     if len(temp_df) < 2:
         return "Insufficient data"
@@ -247,17 +276,19 @@ def generate_weather_recommendations(
         rec.append("Average temp low → May slow decomposition, consider insulation.")
     elif avg_temp > 30:
         rec.append("Average temp high → Monitor for overheating.")
+    else:
+        rec.append("Temperature in optimal values for next day")
 
     # --- Precipitation Analysis ---
-    total_precip = sum(precipitation_forecast)
-    high_precip_intervals = [p for p in precipitation_forecast if p > 5]
+    # total_precip = sum(precipitation_forecast)
+    # high_precip_intervals = [p for p in precipitation_forecast if p > 5]
 
-    if total_precip > 10:
-        rec.append("Heavy rain expected → Cover pile or add extra dry browns.")
-    elif total_precip == 0:
-        rec.append("No rain forecast → Monitor moisture and consider watering.")
-    elif len(high_precip_intervals) >= 2:
-        rec.append("Several heavy showers → Check drainage and cover pile.")
+    # if total_precip > 10:
+    #     rec.append("Heavy rain expected → Cover pile or add extra dry browns.")
+    # elif total_precip == 0:
+    #     rec.append("No rain forecast → Monitor moisture and consider watering.")
+    # elif len(high_precip_intervals) >= 2:
+    #     rec.append("Several heavy showers → Check drainage and cover pile.")
 
     # --- Humidity Analysis ---
     avg_humidity = sum(humidity_forecast) / len(humidity_forecast)
@@ -266,6 +297,8 @@ def generate_weather_recommendations(
         rec.append("Low humidity forecast → Moisten pile and reduce turning.")
     elif avg_humidity > 80:
         rec.append("High humidity forecast → Risk of anaerobic conditions, turn pile.")
+    else:
+        rec.append("Humidity in optimal conditions")
 
     return rec
 
@@ -289,3 +322,41 @@ def generate_npk_recommendations(n, p, k):
         rec.append("Potassium high → Compost is nutrient rich and mature.")
 
     return rec
+
+
+# Estimate speed factor
+def classify_materials(material_list):
+    # Define the lists of green and woody materials
+    greens = ["vegetable scraps", "grass clippings", "coffee grounds", "manure"]
+    woody = ["branches", "twigs", "wood chips", "sawdust", "straw"]
+
+    # Define the speed factors for greens and browns
+    speed_factors = {
+        'greens': 1.5,  # Faster decomposition
+        'browns': 1.0,   # Slower decomposition
+        'mixed': 1.2     # Mixed materials decompose at an intermediate rate
+    }
+
+    # Initialize speed factor sum
+    speed_factor = 0
+
+    # Calculate speed factor based on materials in the list
+    for material in material_list:
+        if material in greens:
+            speed_factor += speed_factors['greens']  # Green materials have a faster decomposition rate
+        elif material in woody:
+            speed_factor += speed_factors['browns']  # Woody materials have a slower decomposition rate
+        else:
+            # If the material is not in the predefined categories, assign a default speed factor (e.g., 1.0)
+            speed_factor += 1.0
+
+    # If the list is empty or no recognized materials, avoid division by zero
+    if len(material_list) > 0:
+        # Average the speed factor across the number of materials in the list
+        speed_factor /= len(material_list)
+    else:
+        # Default speed factor if no materials are passed
+        speed_factor = 1.0
+
+    # Return the calculated speed factor
+    return speed_factor
