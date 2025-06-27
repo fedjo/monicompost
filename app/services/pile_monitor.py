@@ -24,9 +24,9 @@ def analyze_compost_status(
     compost_age_days, remaining_days = estimate_total_duration_static(greens, browns, start_date)
 
     # Compost Phase based on average temperature and moisture
-    avg_temp = daily_stats['data_TEMP_SOIL']['avg']
-    avg_moisture = daily_stats['data_water_SOIL']['avg']
-    avg_ph = daily_stats['data_PH1_SOIL']['avg']
+    avg_temp = daily_stats['temperature']['avg']
+    avg_moisture = daily_stats['moisture']['avg']
+    avg_ph = daily_stats['ph']['avg']
     phase = infer_compost_phase_from_series(temperature_history_df["temp_ma"], compost_age_days)
 
     # Recommendations based on forecasted values for the next day

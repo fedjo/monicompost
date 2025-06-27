@@ -3,6 +3,14 @@ from typing import Optional
 from pydantic import BaseModel
 
 
+class CompostAttributes(BaseModel):
+    start_date: int  # POSIX timestamp in ms
+    greens: int
+    browns: int
+    latitude: float
+    longitude: float
+    fc_compost_operation_id: Optional[str | None] = None
+
 class CompostPileBase(BaseModel):
     name: str
     asset_id: str
