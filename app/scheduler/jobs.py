@@ -96,7 +96,7 @@ def create_recommendation_for_pile(asset_id):
 
         if settings.FARM_CALENDAR_URL:
             for key, stats in daily_stats.items():
-                observation_dict = utils.create_observation_payload(key, stats['min'], stats['max'], stats['avg'])
+                observation_dict = utils.create_observation_payload(key, stats['min'], stats['max'], stats['avg'], "Thingsboard")
                 token = fc.login_to_fc()
                 success = fc.post_observation_to_fc(FC_COMPOST_OPERATION_ID, observation_dict, token)
                 msg = "✅ Sent Observation to Farm Calendar" if success else "❌ Observation not sent"
@@ -217,7 +217,7 @@ def create_recommendation_for_dk_pile(workspace_id, attributes):
 
         if settings.FARM_CALENDAR_URL:
             for key, stats in daily_stats.items():
-                observation_dict = utils.create_observation_payload(key, stats['min'], stats['max'], stats['avg'])
+                observation_dict = utils.create_observation_payload(key, stats['min'], stats['max'], stats['avg'], "Datacake")
                 token = fc.login_to_fc()
                 success = fc.post_observation_to_fc(FC_COMPOST_OPERATION_ID, observation_dict, token)
                 msg = "✅ Sent Observation to Farm Calendar" if success else "❌ Observation not sent"
