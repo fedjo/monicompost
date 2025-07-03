@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 from pydantic import BaseModel
 
@@ -47,12 +47,13 @@ class ObservationBase(BaseModel):
     device_id: str
     device_name: str
     asset_id: str
-    compost_pile_id: int
+    # compost_pile_id: int
+    compost_pile_id: Optional[str] = None
     variable: str
     mean_value: float
     min_value: float
     max_value: float
-    date: str
+    date: datetime
     sent: int = 0
 
 class ObservationCreate(ObservationBase):

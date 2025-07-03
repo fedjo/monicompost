@@ -2,11 +2,15 @@ import datetime
 import json
 import logging
 
+from fastapi import Depends
 import numpy as np
 import pandas as pd
 
 from app.config import settings
 from app import utils
+from app.db.database import get_db
+import app.db.crud as dao
+from app.db.schemas import ObservationCreate
 from app.services.pile_monitor import analyze_compost_status
 import app.services.thingsboard as tb
 import app.services.datacake_client as dk
@@ -43,6 +47,7 @@ def create_recommendation_for_pile(asset_id):
                 continue
 
             keys = config["keys"]
+            device_id = config["id"]
             # Get daily telemetry and calculate stats
             telemetry = tb.get_telemetry_for_current_day(config["id"], keys, token)
             for key in keys:
@@ -52,6 +57,7 @@ def create_recommendation_for_pile(asset_id):
                     continue
 
                 # Rename columns
+                k = ''
                 if 'temp' in key.lower():
                     k = 'temperature'
                 if 'water' in key.lower():
@@ -73,14 +79,30 @@ def create_recommendation_for_pile(asset_id):
                     window = 6 # Appox 2 hours
                     temp_df["temp_ma"] = temp_df[key].rolling(window=window, min_periods=1).mean()
 
-        # Get weather forecast
-        url = f"{settings.WEATHER_SERVICE_URL}/api/linkeddata/forecast5"
-        # forecast = ws.get_24h_forecast(url, latitude, longitude, fc.login_to_fc())
-        forecast = {
-            "temperature": [34.69],
-            "humidity": [20.0]
-        }
+                if settings.FARM_CALENDAR_URL:
+                    observation_dict = utils.create_observation_payload(
+                        k, daily_stats[k]['min'],
+                        daily_stats[k]['max'], daily_stats[k]['avg'],
+                        "Datacake"
+                    )
+                    token = fc.login_to_fc()
+                    success = fc.post_observation_to_fc(FC_COMPOST_OPERATION_ID, observation_dict, token)
+                    msg = "✅ Sent Observation to Farm Calendar" if success else "❌ Observation not sent"
+                    logging.info(f"{msg}: compost operation id: {FC_COMPOST_OPERATION_ID}")
 
+                    if not success:
+                        obs = ObservationCreate(
+                            device_id=device_id, device_name=device_name, asset_id=asset_id,
+                            compost_pile_id=FC_COMPOST_OPERATION_ID, variable=k,
+                            mean_value=daily_stats[k]['avg'],
+                            min_value=daily_stats[k]['min'], max_value=daily_stats[k]['max'],
+                            date=datetime.datetime.now(), sent=success
+                        )
+                        with get_db() as db_session:
+                            id = dao.create_observation(db_session, obs)
+
+        # Get weather forecast
+        forecast = ws.get_24h_forecast(latitude, longitude, fc.login_to_fc())
 
         # Parse attributes
         results = analyze_compost_status(
@@ -113,10 +135,10 @@ def create_recommendation_for_dk_pile(workspace_id, attributes):
     try:
         # Extract metadata from pre-fetched asset attributes
         start_date = datetime.datetime.fromtimestamp(attributes.get("start_date", 0) / 1000)
-        greens_kg = attributes.get("Greens_(KG)", 0)
-        browns_kg = attributes.get("Browns_(KG)", 0)
-        latitude = attributes.get("Latitude")
-        longitude = attributes.get("Longitude")
+        greens_kg = attributes.get("greens", 0)
+        browns_kg = attributes.get("browns", 0)
+        latitude = attributes.get("latitude")
+        longitude = attributes.get("longitude")
 
         # Specify telemetry fields to request
         # fields = ["SOIL_TEMPERATURE", "SOIL_MOISTURE", "SOIL_CONDUCTIVITY", "SOIL_PH"]
@@ -163,16 +185,38 @@ def create_recommendation_for_dk_pile(workspace_id, attributes):
                             if 'ph' in col.lower():
                                 col = 'ph'
 
-                            daily_stats[f"{col}"] = {
+                            daily_stats[col] = {
                                 'min': np.min(values),
                                 'max': np.max(values),
                                 'avg': np.mean(values),
                                 'std': np.std(values)
                             }
+
+                        if settings.FARM_CALENDAR_URL:
+                            observation_dict = utils.create_observation_payload(
+                                col, daily_stats[col]['min'],
+                                daily_stats[col]['max'], daily_stats[col]['avg'],
+                                "Datacake"
+                            )
+                            token = fc.login_to_fc()
+                            success = fc.post_observation_to_fc(FC_COMPOST_OPERATION_ID, observation_dict, token)
+                            msg = "✅ Sent Observation to Farm Calendar" if success else "❌ Observation not sent"
+                            logging.info(f"{msg}: compost operation id: {FC_COMPOST_OPERATION_ID}")
+
+                            if not success:
+                                obs = ObservationCreate(
+                                    device_id=device_id, device_name=device_name, asset_id=workspace_id,
+                                    compost_pile_id=FC_COMPOST_OPERATION_ID, variable=col,
+                                    mean_value=daily_stats[col]['avg'],
+                                    min_value=daily_stats[col]['min'], max_value=daily_stats[col]['max'],
+                                    date=datetime.datetime.now(), sent=success
+                                )
+                                with get_db() as db_session:
+                                    id = dao.create_observation(db_session, obs)
                     except:
                         continue
 
-                logging.info(f"Generated recommendation for Datacake for device: {device_name}")
+                    logging.info(f"Generated recommendation for Datacake for device: {device_name}")
 
             except Exception as e:
                 logging.warning(f"Failed to process device '{device_name}': {e}")
@@ -197,11 +241,8 @@ def create_recommendation_for_dk_pile(workspace_id, attributes):
             logging.warning("No temperature data found across devices.")
             return
 
-        # Dummy weather forecast (replace with real API if needed)
-        forecast = {
-            "temperature": [34.69],
-            "humidity": [20.0]
-        }
+        # Get weather forecast
+        forecast = ws.get_24h_forecast(latitude, longitude, fc.login_to_fc())
 
         # Run your recommendation logic
         results = analyze_compost_status(
@@ -214,21 +255,6 @@ def create_recommendation_for_dk_pile(workspace_id, attributes):
         # post_to_datacake(device_id, results)
 
         logging.info("✅ Recommendation generated successfully")
-
-        if settings.FARM_CALENDAR_URL:
-            for key, stats in daily_stats.items():
-                observation_dict = utils.create_observation_payload(key, stats['min'], stats['max'], stats['avg'], "Datacake")
-                token = fc.login_to_fc()
-                success = fc.post_observation_to_fc(FC_COMPOST_OPERATION_ID, observation_dict, token)
-                msg = "✅ Sent Observation to Farm Calendar" if success else "❌ Observation not sent"
-                logging.info(f"{msg}: compost operation id: {FC_COMPOST_OPERATION_ID}")
-
-                # if not success:
-                #     insert_observation(
-                #         observation_dict, device["id"], device["name"],
-                #         workspace_id, FC_COMPOST_OPERATION_ID, success
-                #     )
-
 
     except Exception as e:
         logging.error(f"Error processing Datacake device: {e}")

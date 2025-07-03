@@ -9,7 +9,7 @@ scheduler = BackgroundScheduler()
 running_job_ids = set()
 
 def schedule_tb_pile_monitor_job(asset_id):
-    job_id = f"tb_{asset_id}"
+    job_id = f"job_{asset_id}"
     scheduler.add_job(
         func=create_recommendation_for_pile,
         trigger='cron',
@@ -26,7 +26,7 @@ def schedule_tb_pile_monitor_job(asset_id):
 
 
 def remove_running_job(asset_id):
-        job_id = f"tb_{asset_id}"
+        job_id = f"job_{asset_id}"
         logging.info(f"Cancelling job...")
         if not job_id in running_job_ids:
             logging.error(f"Could not cancel job with id: {job_id}")
@@ -38,7 +38,7 @@ def remove_running_job(asset_id):
         return job_id
 
 def schedule_dk_pile_monitor_job(workspace_id, attributes):
-    job_id = f"dk_{workspace_id}"
+    job_id = f"job_{workspace_id}"
     scheduler.add_job(
         func=create_recommendation_for_dk_pile,
         trigger='cron',

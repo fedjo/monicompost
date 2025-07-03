@@ -34,7 +34,7 @@ def create_observation(db: Session, obs: schemas.ObservationCreate):
     db.add(db_obs)
     db.commit()
     db.refresh(db_obs)
-    return db_obs
+    return db_obs.id
 
 def get_unsent_observations(db: Session):
     return db.query(models.Observation).filter(models.Observation.sent == 0).all()

@@ -3,21 +3,13 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.db import crud, schemas
-from app.db.database import SessionLocal
+from app.db.database import get_db
 import app.services.thingsboard as tb
 import app.services.datacake_client as dk
 from app.scheduler.scheduler import remove_running_job, schedule_tb_pile_monitor_job, schedule_dk_pile_monitor_job
 
 
 router = APIRouter()
-
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 @router.get("/ping")
@@ -62,3 +54,11 @@ def add_datacake_monitor_job(workspace_id: str, compost_attrs: schemas.CompostAt
         return JSONResponse(content={'status': f'Job with id: {job_id} was created'})
     except Exception as e:
         return JSONResponse(content={'status': f'Error: {str(e)}'}, status_code=500)
+
+@router.get("/datacake/cancel/{workspace_id}")
+def cancel_datacake_monitor_job(workspace_id: str):
+    try:
+        job_id = remove_running_job(workspace_id)
+    except Exception as e:
+        return JSONResponse(content={'status': f'Error: {str(e)}'}, status_code=500)
+    return JSONResponse(content={'status': f'Job with id: {job_id} was cancelled'})
