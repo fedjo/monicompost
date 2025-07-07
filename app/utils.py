@@ -7,7 +7,7 @@ TEMP_ACTIVITY_TYPE_ID = settings.TEMP_ACTIVITY_TYPE_ID
 HUMIDITY_ACTIVITY_TYPE_ID = settings.HUMIDITY_ACTIVITY_TYPE_ID
 
 # Function to create the observation payload
-def create_observation_payload(key, minn, maxx, avg, source):
+def create_observation_payload(key, minn, maxx, avg, pile_name, source):
     # Determine the observed property and unit based on the variable (key)
     if any(e in key for e in ("TEMP", "temperature")):  # For temperature
         key = "Soil Temperature"
@@ -30,7 +30,7 @@ def create_observation_payload(key, minn, maxx, avg, source):
     # Create the payload
     return {
         "@type": "Observation",
-        "title": f"{source} - {key} Daily Average",
+        "title": f"{pile_name} - {key} Daily Average",
         "observedProperty": prop,
         "activityType": f"urn:farmcalendar:FarmActivityType:{act}",
         "details": f"Values range from MIN: {minn} to MAX: {maxx}",

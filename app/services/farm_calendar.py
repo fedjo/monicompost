@@ -68,4 +68,5 @@ def post_observation_to_fc(compost_operation_id, observation_data, token):
         return True
     except requests.exceptions.RequestException as e:
         logging.error(f"Failed to post observation: {e}")
+        logging.exception(e)
         return False

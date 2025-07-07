@@ -88,7 +88,7 @@ def get_all_telemetry_for_key_df(device_id, key, start_date, token):
     return df
 
 
-def get_asset_info(asset_id, token):
+def get_asset_info(asset_id, token) -> dict:
     url = f"{settings.THINGSBOARD_URL}/api/asset/{asset_id}"
     headers = {
         "Content-Type": "application/json",
@@ -101,14 +101,13 @@ def get_asset_info(asset_id, token):
             return response.json()
         elif response.status_code == 404:
             logging.error(f"Asset with ID '{asset_id}' not found.")
-            return None
+            return {}
         else:
             logging.error(f"Failed to retrieve asset. Status code: {response.status_code}")
-            return None
+            return {}
     except requests.exceptions.RequestException as e:
         logging.error(f"An error occurred: {e}")
-        return None
-
+        return {}
 
 
 def get_devices_by_asset(asset_id, token):

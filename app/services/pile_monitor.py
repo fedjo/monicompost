@@ -117,7 +117,7 @@ def estimate_total_duration_static(greens_kg, browns_kg, compost_start_date, bas
     speed_factor = base_speed_factor(cn_ratio)
     total_estimated_days = int(round(base_days / speed_factor))
 
-    days_elapsed = (datetime.datetime.now() - compost_start_date).days
+    days_elapsed = (datetime.date.today() - compost_start_date).days
     remaining_days = max(total_estimated_days - days_elapsed, 0)
     return days_elapsed, remaining_days
 

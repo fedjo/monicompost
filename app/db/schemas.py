@@ -13,9 +13,12 @@ class CompostAttributes(BaseModel):
 
 class CompostPileBase(BaseModel):
     name: str
-    asset_id: str
-    start_date: date
-    materials: str
+    ext_id: str
+    start_date: datetime
+    greens: int
+    browns: int
+    latitude: float
+    longitude: float
 
 class CompostPileCreate(CompostPileBase):
     pass
@@ -27,28 +30,11 @@ class CompostPileRead(CompostPileBase):
         orm_mode = True
 
 
-class FCCompostPileBase(BaseModel):
-    pile_id: str
-    pile_name: str
-    start_date: Optional[str]
-    end_date: Optional[str]
-
-class FCCompostPileCreate(FCCompostPileBase):
-    pass
-
-class FCCompostPileOut(FCCompostPileBase):
-    id: int
-
-    class Config:
-        orm_mode = True
-
-
 class ObservationBase(BaseModel):
     device_id: str
     device_name: str
-    asset_id: str
-    # compost_pile_id: int
-    compost_pile_id: Optional[str] = None
+    pile_id: int
+    fc_compost_operation_id: Optional[str] = None
     variable: str
     mean_value: float
     min_value: float

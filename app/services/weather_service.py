@@ -1,10 +1,11 @@
 
 # Observed Properties map
-import datetime
+from datetime import timezone, datetime, timedelta
 from typing import Dict, List
-
 from dateutil import parser as date_parser
 import requests
+
+from app.config import settings
 
 
 OBSERVED_PROPERTIES = {
@@ -21,16 +22,18 @@ def get_5days_forecast(api_url, lat, lon, token):
     response.raise_for_status()
     return response.json()
 
-def get_24h_forecast(api_url, lat, lon, token) -> Dict[str, List[float]]:
+def get_24h_forecast(lat, lon, token) -> Dict[str, List[float]]:
+    url = f"{settings.WEATHER_SERVICE_URL}/api/linkeddata/forecast5"
+    url = "https://wd.sip5.horizon-openagri.eu/api/linkeddata/forecast5"
     params = {"lat": lat, "lon": lon}
     headers = {"Authorization": f"Bearer {token}"}
 
-    response = requests.get(api_url, params=params, headers=headers) # pylint: disable=W3101
+    response = requests.get(url, params=params, headers=headers) # pylint: disable=W3101
     response.raise_for_status()
     forecast_json = response.json()
 
-    now = datetime.datetime.utcnow()
-    next_24h = now + datetime.timedelta(hours=24)
+    now = datetime.now(timezone.utc)
+    next_24h = now + timedelta(hours=24)
 
     forecast_data = {
         "temperature": [],
@@ -39,7 +42,7 @@ def get_24h_forecast(api_url, lat, lon, token) -> Dict[str, List[float]]:
     }
 
     for item in forecast_json.get("@graph", []):
-        phenomenon_time = date_parser.parse(item.get("phenomenonTime"))
+        phenomenon_time = datetime.fromisoformat(item.get("phenomenonTime")).replace(tzinfo=timezone.utc)
         if not (now <= phenomenon_time <= next_24h):
             continue
 
