@@ -31,7 +31,10 @@ ARG GROUP_ID=1001
 RUN groupadd -r openagri --gid $GROUP_ID && \
     useradd -d /home/openagri -ms /bin/bash -r -g openagri openagri --uid $USER_ID
 
-COPY app ./app
+COPY app/ ./app
+COPY alembic/ ./alembic
+COPY alembic.ini ./
+RUN alembic upgrade head
 # COPY tests ./tests
 COPY run.py ./
 
