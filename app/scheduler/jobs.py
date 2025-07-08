@@ -62,8 +62,6 @@ def create_recommendation_for_pile(asset_id):
             device_id = config["id"]
             # Get daily telemetry and calculate stats
             token = tb.login_tb()
-            if not token:
-                return
             telemetry = tb.get_telemetry_for_current_day(config["id"], keys, token)
             for key in keys:
                 datapoints = telemetry.get(key, [])
