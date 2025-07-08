@@ -1,0 +1,16 @@
+version: '3.9'
+
+services:
+  monicompost:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: monicompost:latest
+    container_name: monicompost
+    env_file:
+      - .env
+    ports:
+     - 8000:8000
+    volumes:
+      - ./data:/monicompost/data
+    command: ["python3", "run.py"]

@@ -4,7 +4,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     DB_URL: str = "sqlite:///./db.sqlite"
     LOG_LEVEL: str = "INFO"
-    DATABASE_URL: Optional[str] = None
     # Datasources
     # Thingsboard
     THINGSBOARD_URL: Optional[str] = None

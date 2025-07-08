@@ -34,7 +34,6 @@ RUN groupadd -r openagri --gid $GROUP_ID && \
 COPY app/ ./app
 COPY alembic/ ./alembic
 COPY alembic.ini ./
-RUN alembic upgrade head
 # COPY tests ./tests
 COPY run.py ./
 
