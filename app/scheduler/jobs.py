@@ -8,7 +8,7 @@ import pandas as pd
 
 from app.config import settings
 from app import utils
-from app.db.database import get_db
+from app.db.database import db_session_scope
 import app.db.crud as dao
 from app.db.models import CompostPile
 from app.db.schemas import CompostPileCreate, ObservationCreate
@@ -33,7 +33,7 @@ def create_recommendation_for_pile(asset_id):
         asset_attrs = tb.get_asset_attributes(asset_id, token)
         asset_info = tb.get_asset_info(asset_id, token)
 
-        with get_db() as db_session:
+        with db_session_scope() as db_session:
             db_pile = dao.get_pile_by_ext_id(db_session, asset_id)
             if not db_pile:
                 # Extract metadata from pre-fetched asset attributes
@@ -112,7 +112,7 @@ def create_recommendation_for_pile(asset_id):
                                 min_value=daily_stats[k]['min'], max_value=daily_stats[k]['max'],
                                 date=datetime.datetime.now(datetime.timezone.utc), sent=success
                             )
-                        with get_db() as db_session:
+                        with db_session_scope() as db_session:
                             obs = dao.create_observation(db_session, obs)
 
         # Get weather forecast
@@ -143,7 +143,7 @@ def create_recommendation_for_dk_pile(workspace_id, attributes):
         workspace_name = dk.get_workspace_name_by_id(workspace_id)
         workspace_name = workspace_name if workspace_name else 'anonymous'
 
-        with get_db() as db_session:
+        with db_session_scope() as db_session:
             db_pile = dao.get_pile_by_ext_id(db_session, workspace_id)
             if not db_pile:
                 # Extract metadata from pre-fetched asset attributes
@@ -229,7 +229,7 @@ def create_recommendation_for_dk_pile(workspace_id, attributes):
                                     min_value=daily_stats[col]['min'], max_value=daily_stats[col]['max'],
                                     date=datetime.datetime.now(datetime.timezone.utc), sent=success
                                 )
-                                with get_db() as db_session:
+                                with db_session_scope() as db_session:
                                     obs = dao.create_observation(db_session, obs)
                     except Exception as e:
                         logging.exception(e)
