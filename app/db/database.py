@@ -1,4 +1,5 @@
-import contextlib
+import importlib
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 from app.config import settings
@@ -8,10 +9,9 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 def init_db():
-    from app.db import models
+    importlib.import_module("app.db.models")
     Base.metadata.create_all(bind=engine)
 
-@contextlib.contextmanager
 def get_db():
     db = SessionLocal()
     try:
